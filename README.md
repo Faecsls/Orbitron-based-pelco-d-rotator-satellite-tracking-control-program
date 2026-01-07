@@ -1,4 +1,3 @@
-<img width="1920" height="1040" alt="C" src="https://github.com/user-attachments/assets/50c01d5b-6417-4967-a934-94611bfd8cdf" />
 1.解压后放入任意目录
 2.打开orbitron选择mydde，选择主程序（Peclo-D云台跟踪程序）
 <img width="1920" height="1041" alt="A" src="https://github.com/user-attachments/assets/f040cff2-00ab-4ec7-931a-aad21cf5f0ca" />
