@@ -1,0 +1,187 @@
+GetAngle - PELCO-D角度查询类
+
+简介
+
+GetAngle是一个用于查询PELCO-D协议兼容云台设备角度信息的Python类。支持查询水平和垂直角度，并自动处理垂直角度的负数转换。
+
+安装依赖
+
+```bash
+pip install pyserial
+```
+
+快速开始
+
+```python
+import serial
+from get_angle import GetAngle
+
+# 1. 创建串口连接
+ser = serial.Serial('COM3', baudrate=9600, timeout=1.0)
+
+# 2. 创建角度查询实例
+angle_query = GetAngle()
+
+# 3. 设置串口对象
+angle_query.set_serial_port(ser)
+
+# 4. 设置设备地址（可选，默认为1）
+angle_query.set_device_address(1)
+
+# 5. 设置垂直角度模式（可选，默认为'auto'）
+angle_query.set_vertical_angle_mode('auto')  # 'auto', 'direct', 'negative'
+
+# 6. 查询角度
+result = angle_query.query_angles()
+
+# 7. 检查结果
+if result['success']:
+    print(f"水平角度: {result['horizontal_angle']:.2f}°")
+    print(f"垂直角度: {result['vertical_angle']:.2f}°")
+else:
+    print(f"查询失败: {result['error_message']}")
+
+# 8. 断开连接
+ser.close()
+```
+
+返回格式
+
+query_angles()方法返回一个字典，包含以下字段：
+
+成功时返回示例：
+
+```python
+{
+    'success': True,                    # 查询成功标志
+    'horizontal_angle': 123.45,         # 水平角度（度）
+    'vertical_angle': -45.67,           # 垂直角度（度，可能为负数）
+    'horizontal_raw': 12345,            # 水平原始值（0-35999）
+    'vertical_raw': 4567,               # 垂直原始值（0-35999）
+    'tx_horizontal': b'\xFF\x01\x00\x51\x00\x00\x52',      # 水平查询命令
+    'rx_horizontal': b'\xFF\x01\x00\x59\x30\x39\x99',      # 水平查询响应
+    'tx_vertical': b'\xFF\x01\x00\x53\x00\x00\x54',        # 垂直查询命令
+    'rx_vertical': b'\xFF\x01\x00\x5B\x11\xD7\xE3',        # 垂直查询响应
+    'device_address': 1,                # 设备地址
+    'error_message': '',                # 错误信息（成功时为空）
+    'vertical_mode': 'auto'             # 垂直角度转换模式
+}
+```
+
+失败时返回示例：
+
+```python
+{
+    'success': False,                   # 查询失败标志
+    'horizontal_angle': None,           # 水平角度为None
+    'vertical_angle': None,             # 垂直角度为None
+    'horizontal_raw': None,             # 水平原始值为None
+    'vertical_raw': None,               # 垂直原始值为None
+    'tx_horizontal': b'',               # 发送数据为空
+    'rx_horizontal': b'',               # 接收数据为空
+    'tx_vertical': b'',                 # 发送数据为空
+    'rx_vertical': b'',                 # 接收数据为空
+    'device_address': 1,                # 设备地址
+    'error_message': '未连接串口',       # 错误信息
+    'vertical_mode': 'auto'             # 垂直角度转换模式
+}
+```
+
+垂直角度转换模式
+
+垂直角度有三种转换模式：
+
+1. auto（默认）：
+   · 智能判断角度范围
+   · 0-90°：保持正数
+   · 180-360°：转换为负数（角度-360）
+   · 例如：270° → -90°
+2. direct：
+   · 直接显示原始值
+   · 不进行任何转换
+   · 例如：270° → 270°
+3. negative：
+   · 强制转换模式
+   · 180°的度数都转换为负数
+   · 例如：270° → -90°
+
+主要方法
+
+1. set_serial_port(serial_port)
+
+设置串口对象。
+
+· 参数：串口对象（需支持write/read方法）
+· 返回：无
+
+2. set_device_address(address)
+
+设置设备地址。
+
+· 参数：地址（1-255）
+· 返回：布尔值（设置成功为True）
+
+3. set_vertical_angle_mode(mode)
+
+设置垂直角度转换模式。
+
+· 参数：模式字符串（'auto', 'direct', 'negative'）
+· 返回：布尔值（设置成功为True）
+
+4. query_angles()
+
+查询角度（主要方法）。
+
+· 参数：无
+· 返回：结果字典（见返回格式）
+
+5. format_result(result)
+
+格式化查询结果为可读字符串。
+
+· 参数：query_angles()返回的结果字典
+· 返回：格式化后的字符串
+
+6. get_last_angles()
+
+获取最后查询到的角度值。
+
+· 参数：无
+· 返回：(水平角度, 垂直角度)元组
+
+错误处理
+
+常见错误信息：
+
+· '未连接串口'：未设置串口对象
+· '角度查询失败'：查询响应失败或校验错误
+· '串口通信错误'：读写串口时发生异常
+
+示例代码
+
+```python
+# 格式化输出
+result = angle_query.query_angles()
+print(angle_query.format_result(result))
+
+# 输出示例：
+"""
+查询成功 - 设备地址: 0x01
+垂直角度模式: auto
+水平角度: 123.45°
+垂直角度: -45.67°
+水平原始值: 12345 (0x3039)
+垂直原始值: 4567 (0x11D7)
+水平查询: TX=FF 01 00 51 00 00 52
+          RX=FF 01 00 59 30 39 99
+垂直查询: TX=FF 01 00 53 00 00 54
+          RX=FF 01 00 5B 11 D7 E3
+"""
+```
+
+注意事项
+
+1. 设备地址默认为1（0x01）
+2. 查询前必须先设置串口对象
+3. 垂直角度默认使用auto模式自动转换
+4. 连续查询建议间隔至少100ms

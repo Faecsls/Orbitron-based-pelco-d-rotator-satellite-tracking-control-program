@@ -1,0 +1,265 @@
+PELCO-D 云台控制类
+
+概述
+
+这是一个用于生成PELCO-D协议指令的Python类，支持基础运动控制和扩展绝对位置控制功能。类专注于生成正确的PELCO-D指令字节流，不包含串口通信部分，方便集成到各种项目中。
+
+功能特性
+
+· ✅ 生成完整的PELCO-D指令帧
+· ✅ 支持基础运动控制（上/下/左/右/停止）
+· ✅ 支持扩展绝对位置控制（0x4B水平/0x4D垂直）
+· ✅ 支持设备地址设置
+· ✅ 自动计算校验和
+· ✅ 简洁易用的接口
+
+安装要求
+
+无需特殊安装，只需Python 3.6+环境。
+
+快速开始
+
+```python
+from MoveControl import MoveControl
+
+# 创建控制器实例（默认地址0x01）
+controller = MoveControl(address=0x01)
+
+# 基础运动控制
+up_command = controller.move_up()      # 向上移动
+down_command = controller.move_down()  # 向下移动
+left_command = controller.move_left()  # 向左移动
+right_command = controller.move_right() # 向右移动
+stop_command = controller.stop()       # 停止运动
+
+# 绝对位置控制
+horizontal_command = controller.set_horizontal_angle(90.0)  # 水平转到90度
+vertical_command = controller.set_vertical_angle(-45.0)     # 垂直转到-45度
+
+# 发送命令到串口（需要配合串口库）
+# serial_port.write(up_command)
+```
+
+API接口
+
+初始化
+
+```python
+controller = MoveControl(address=0x01)
+```
+
+参数 类型 说明 默认值
+address int 设备地址 (0x01-0xFF) 0x01
+
+地址管理
+
+```python
+success = controller.set_address(0x02)  # 设置新地址
+```
+
+基础运动控制
+
+```python
+# 所有方法返回bytes类型的完整PELCO-D指令
+controller.move_up()     # 向上移动
+controller.move_down()   # 向下移动
+controller.move_left()   # 向左移动
+controller.move_right()  # 向右移动
+controller.stop()        # 停止所有运动
+```
+
+扩展绝对位置控制
+
+```python
+# 设置水平绝对角度 (0-360度)
+horizontal_cmd = controller.set_horizontal_angle(angle)
+# 例如：controller.set_horizontal_angle(180.0)  # 转到180度
+
+# 设置垂直绝对角度 (-90到+90度)
+vertical_cmd = controller.set_vertical_angle(angle)
+# 例如：controller.set_vertical_angle(-45.0)  # 向下45度
+#       controller.set_vertical_angle(30.0)   # 向上30度
+```
+
+角度定义：
+
+· 水平角度：0-360°，0°=正北
+· 垂直角度：
+  · 正值：向下（俯角）
+  · 负值：向上（仰角）
+  · 0°：水平方向
+
+数据格式
+
+PELCO-D指令帧结构
+
+```
+完整帧：FF [Addr] [Cmd1] [Cmd2] [Data1] [Data2] [Checksum]
+长度：7字节
+
+字段说明：
+1. FF: 同步头 (固定0xFF)
+2. Addr: 设备地址 (0x01-0xFF)
+3. Cmd1: 命令字节1 (基础运动为0x00，扩展命令为0x00)
+4. Cmd2: 命令字节2
+   - 0x10: 向上移动
+   - 0x08: 向下移动
+   - 0x04: 向左移动
+   - 0x02: 向右移动
+   - 0x00: 停止
+   - 0x4B: 水平绝对控制
+   - 0x4D: 垂直绝对控制
+5. Data1: 数据字节1
+6. Data2: 数据字节2
+7. Checksum: 校验和 (字节2-6的和取低8位)
+```
+
+扩展命令数据格式
+
+水平绝对控制 (0x4B):
+
+```
+Data1: 角度编码值的高8位
+Data2: 角度编码值的低8位
+编码值 = 角度(度) × 100
+示例：90° → 9000 → 0x2328 → Data1=0x23, Data2=0x28
+```
+
+垂直绝对控制 (0x4D):
+
+```
+Data1: 角度编码值的高8位
+Data2: 角度编码值的低8位
+编码规则：
+  - 正值(向下)：编码值 = 角度 × 100
+  - 负值(向上)：编码值 = 36000 - abs(角度) × 100
+示例：
+  - +45°(向下)：4500 → 0x1194 → Data1=0x11, Data2=0x94
+  - -30°(向上)：33000 → 0x80E8 → Data1=0x80, Data2=0xE8
+```
+
+示例指令
+
+```python
+# 向上移动
+# FF 01 00 10 00 20 31
+controller.move_up()
+
+# 水平转到180°
+# FF 01 00 4B 46 50 D2
+controller.set_horizontal_angle(180.0)
+
+# 垂直转到-45°(向上45°)
+# FF 01 00 4D 8C A0 7A
+controller.set_vertical_angle(-45.0)
+```
+
+使用示例
+
+简单测试程序
+
+```python
+from MoveControl import MoveControl
+import serial
+import time
+
+def test_pelcod():
+    # 创建控制器
+    controller = MoveControl(address=0x01)
+
+    # 打开串口
+    ser = serial.Serial('COM1', 2400, timeout=1)
+
+    try:
+        # 测试基础运动
+        print("测试向上移动...")
+        ser.write(controller.move_up())
+        time.sleep(2)
+        ser.write(controller.stop())
+
+        # 测试绝对位置
+        print("转到水平90度...")
+        ser.write(controller.set_horizontal_angle(90.0))
+        time.sleep(3)
+
+        print("转到垂直-30度...")
+        ser.write(controller.set_vertical_angle(-30.0))
+        time.sleep(3)
+
+    finally:
+        ser.close()
+
+if __name__ == "__main__":
+    test_pelcod()
+```
+
+与串口通信结合
+
+```python
+import serial
+from MoveControl import MoveControl
+
+class PelcoDController:
+    def __init__(self, port, baudrate=2400, address=0x01):
+        self.serial = serial.Serial(port, baudrate)
+        self.controller = MoveControl(address)
+
+    def send_command(self, command_bytes, description=""):
+        """发送命令并打印信息"""
+        hex_str = ' '.join([f'{b:02X}' for b in command_bytes])
+        print(f"{description}: {hex_str}")
+        self.serial.write(command_bytes)
+
+    def goto_position(self, horizontal=None, vertical=None):
+        """转到指定位置"""
+        if horizontal is not None:
+            cmd = self.controller.set_horizontal_angle(horizontal)
+            self.send_command(cmd, f"水平转到{horizontal}°")
+
+        if vertical is not None:
+            cmd = self.controller.set_vertical_angle(vertical)
+            self.send_command(cmd, f"垂直转到{vertical}°")
+
+    def close(self):
+        self.serial.close()
+
+# 使用示例
+ctrl = PelcoDController('/dev/ttyUSB0', 2400, 0x01)
+ctrl.goto_position(horizontal=180.0, vertical=-45.0)
+ctrl.close()
+```
+
+注意事项
+
+1. 协议兼容性：确保设备支持PELCO-D协议，特别是扩展命令0x4B/0x4D
+2. 串口参数：典型的串口设置：2400bps, 8N1
+3. 角度范围：
+   · 水平：0-360°，超出会抛出异常
+   · 垂直：-90°到+90°，超出会抛出异常
+4. 垂直方向：本类中正值表示向下，负值表示向上
+5. 速度固定：基础运动使用固定速度0x20，如需要调整需修改代码
+
+错误处理
+
+类会检查输入参数的有效性，无效参数会抛出ValueError：
+
+```python
+try:
+    cmd = controller.set_horizontal_angle(400.0)  # 超出范围
+except ValueError as e:
+    print(f"错误: {e}")  # 输出：错误: 水平角度必须在0-360度之间
+```
+
+版本历史
+
+· v1.2: 修正垂直角度方向（正值向下，负值向上）
+· v1.1: 修正基础运动命令值
+· v1.0: 初始版本，支持基础运动和扩展绝对位置控制
+
+许可证
+
+本项目代码可自由使用、修改和分发。
+
+支持
+
+如有问题或建议，请提交Issue或联系开发者。
